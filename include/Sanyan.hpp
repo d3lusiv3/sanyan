@@ -1,14 +1,31 @@
 #ifndef __SANYAN_SIGSLOT_HPP
 #define __SANYAN_SIGSLOT_HPP
 
+
 #include <unordered_map>
 #include <functional>
 #include <typeinfo>
 
+#ifdef _DEBUG
+#ifdef _SANYAN_EXTRA_DEBUG_INFO
+#include <iostream>
+#include <string>
+#define SANYAN_DEBUG_INFO( msg ) std::cout << "SANYAN DEBUG INFO: " << msg << std::endl
+#else
+#define SANYAN_DEBUG_INFO( msg )
+#endif
+#elif
+#define SANYAN_DEBUG_INFO( msg )
+#endif
+
 namespace sanyan
 {
+
+
+
 	//Define types to be used
 	using Type_ID = size_t;
+	using Function_ID_Type = intptr_t;
 
 	//forward declare slot base for deffinition of slotted class
    class SlotBase;
@@ -29,21 +46,22 @@ namespace sanyan
 	class SlotBase
 	{
 	   public:
-		   SlotBase( std::string slot_name, Type_ID type_ID );
-         SlotBase( std::string slot_name, Type_ID type_ID, const SlottedClass* slotted_parent );
+		   SlotBase( std::string slot_name, Type_ID type_ID, Function_ID_Type receive_function_id );
+           SlotBase( std::string slot_name, Type_ID type_ID, const SlottedClass* slotted_parent );
 		
-         std::string SlotName();
-         Type_ID SlotType();
-         void ReceiveBase( const void* arguments );
+           std::string SlotName();
+           Type_ID SlotType();
+           void ReceiveBase( const void* arguments );
       
 
-         virtual void Receive( const void*  arguments ) = 0;
+           virtual void Receive( const void*  arguments ) = 0;
 
       private:
 		   SlotBase();
 		   std::string slot_name_;
 		   Type_ID type_ID_;
-         const SlottedClass* slotted_parent_;
+		   const SlottedClass* slotted_parent_;
+		   Function_ID_Type receive_function_id_;
 	};
 
    //Inherit from this class if you want to have a named slot that can be grouped
@@ -53,7 +71,7 @@ namespace sanyan
    class InheritableSlot : public SlotBase
    {
       public:
-         InheritableSlot( std::string slot_name ) : SlotBase( slot_name, typeid( T ).hash_code() ) {}
+		  InheritableSlot(std::string slot_name) : SlotBase(slot_name, typeid(T).hash_code(), (intptr_t)&InheritableSlot::OnReceived) {}
 
          virtual void Receive( const void* arguments ) override
          {
@@ -67,6 +85,35 @@ namespace sanyan
       private:
          InheritableSlot( ){};
 
+   };
+
+   //TODO: this needs a better name I think
+   template < class T >
+   class FunctinalSlot : public SlotBase
+   {
+	 public:
+		 FunctinalSlot( std::string slot_name, void( *function_pointer )( T ) ) : SlotBase( slot_name, typeid( T ).hash_code() ), function_pointer_( function_pointer ){}
+
+		 virtual void Receive( const void* arguments ) override
+		 {
+			 T localCopy;
+			 memcpy( (void*)&localCopy, arguments, sizeof( T ) );
+			 (*function_pointer_)( localCopy );
+		 }
+
+		 bool operator==( void( *rhs )( T ) )
+		 {
+			 bool ret = false;
+			 if ( function_pointer_ == rhs )
+			 {
+				 ret = true;
+			 }
+			 return ret;
+		 }
+
+	  private:
+		  FunctinalSlot(){}
+		  void( *function_pointer_ )( T );
    };
 
    template < class T, class C >
@@ -115,6 +162,7 @@ namespace sanyan
    {
 
       public:
+
          Signal( std::string signal_name )
             : SignalBase( signal_name, typeid( T ).hash_code() )
          {
@@ -134,7 +182,49 @@ namespace sanyan
             {
                sanyan_slots_.push_back( slot_base );
             }
+			else
+			{
+				//TODO: Throw an error about type mismatch
+			}
          }
+
+		 bool Connect( void( function_pointer )( T ) )
+		 {
+			 bool ret = false;
+
+			 SANYAN_DEBUG_INFO("HASHES: " << typeid(T).hash_code() << " :: " << SignalType() << std::endl);
+			 if( typeid( T ).hash_code() == SignalType() )
+			 {
+				 //we create a nameless functional slot here
+				 //TODO: also create a connect that allows to pass
+				 //in a function pointer and a name for the slot
+				 sanyan_slots_.push_back(new FunctinalSlot< T >( "", function_pointer ) );
+				 ret = true;
+			 }
+			 else
+			 {
+				 //TODO: Throw an error about type mismatch
+				 ret = false;
+			 }
+			 return ret;
+		 }
+
+		 bool Disconnect( void( function_pointer  )( T ) )
+		 {
+			 bool ret = false;
+
+			 for( std::vector < SlotBase* >::iterator ssIT = sanyan_slots_.begin();
+				 ssIT != sanyan_slots_.end();
+				 ++ssIT)
+			 {
+				 if( (*ssIT) == function_pointer )
+				 {
+					 sanyan_slots_.erase( ssIT );
+					 ret = true;
+					 break;
+				 }
+			 }
+		 }
 
          void operator()( T arguments )
          {
@@ -145,7 +235,6 @@ namespace sanyan
       private:
          Signal(){};
 
-         std::vector < std::function< void( T ) > > non_sanyan_slots_;
          std::vector < SlotBase* > sanyan_slots_;
    };
 

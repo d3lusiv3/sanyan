@@ -14,9 +14,10 @@ namespace sanyan
       slots_[ slot_base->SlotName() ] = slot_base;
 	}
 
-	SlotBase::SlotBase( std::string slot_name, Type_ID type_ID )
-		:  slot_name_   ( slot_name )
-		 , type_ID_     ( type_ID )
+	SlotBase::SlotBase( std::string slot_name, Type_ID type_ID, Function_ID_Type receive_function_id )
+		:  slot_name_          ( slot_name )
+		 , type_ID_            ( type_ID )
+		 , receive_function_id_( receive_function_id )
 	{
 
 	}
@@ -55,6 +56,8 @@ namespace sanyan
 	}
 
 	SignalBase::SignalBase( std::string signal_name, Type_ID type_id )
+		: signal_name_( signal_name )
+		, type_ID_( type_id )
 	{
 
 	}
