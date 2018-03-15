@@ -20,6 +20,11 @@
 #define SANYAN_DEBUG_INFO( msg )
 #endif
 
+#define MEMBERSLOT( name, type, parentClass )  void name( type ); \
+sanyan::MemberSlot< type,  parentClass > name##Slot = { #name, this, &parentClass::name }
+
+#define MEMBERSIGNAL( name, type, parentClass ) sanyan::Signal< type > name = { #name, this }
+
 namespace sanyan
 {
 
@@ -37,7 +42,7 @@ namespace sanyan
 	class SlottedClass
 	{
 	   public:
-		   SlottedClass() ;
+		   SlottedClass();
          void RegisterSlot( SlotBase* slot_base );
 
 	   private:
@@ -68,8 +73,8 @@ namespace sanyan
 	{
 	   public:
            SlotBase( std::string slot_name, Type_ID type_ID, void( *base_function_pointer_ )( void* ) );
-           SlotBase( std::string slot_name, Type_ID type_ID, const SlottedClass* slotted_parent );
-		
+           SlotBase( std::string slot_name, Type_ID type_ID, SlottedClass* const slotted_parent );
+
            virtual ~SlotBase();
            std::string SlotName();
            Type_ID SlotType();
@@ -81,7 +86,7 @@ namespace sanyan
            bool operator==( void( * const function_pointer )( void* ) );
 
            virtual void Receive( const void*  arguments ) = 0;
-           
+		   SlottedClass* const SlottedParent();
            
       private:
 
@@ -100,10 +105,10 @@ namespace sanyan
             }
          }
 
-		   SlotBase();
-		   std::string slot_name_;
-		   Type_ID type_ID_;
-		   const SlottedClass* slotted_parent_;
+		 SlotBase();
+	     std::string slot_name_;
+         Type_ID type_ID_;
+	     SlottedClass* const slotted_parent_;
          void( *base_function_pointer_ )( void* );
          static Unique_ID_Type slot_uuid_generator_;
          Unique_ID_Type uuid_;
@@ -166,12 +171,12 @@ namespace sanyan
    class MemberSlot : public SlotBase
    {
       public:
-         MemberSlot( std::string slot_name, const C* callback_parent_object, void( C::*member_function_callback )( T ) ) : SlotBase( slot_name, typeid( T ).hash_code( ) ), callback_parent_object_( callback_parent_object ), member_function_callback_( member_function_callback ){}
+		  MemberSlot(std::string slot_name, C* const callback_parent_object, void(C::*member_function_callback)(T)) : SlotBase(slot_name, typeid(T).hash_code(), callback_parent_object), callback_parent_object_(callback_parent_object), member_function_callback_(member_function_callback){};
 
          virtual void Receive( const void* arguments ) override
          {
             T localArgs;
-            memcpy( ( void* )&localArgs, args, sizeof( T ) );
+			memcpy((void*)&localArgs, arguments, sizeof(T));
             OnReceived( localArgs );
          }
 
@@ -182,8 +187,18 @@ namespace sanyan
 
       private:
          MemberSlot() {}
-         const C* callback_parent_object_;
+         C* const callback_parent_object_;
          void( C::*member_function_callback_ )( T );
+   };
+
+   class SignalingClass
+   {
+      public:
+		  SignalingClass();
+		  void RegisterSignal(SignalBase* signal_base);
+      private:
+		  std::unordered_map< std::string, SignalBase* > signals_;
+
    };
 
 	//Base Class for a signal
@@ -191,6 +206,11 @@ namespace sanyan
 	{
 	   public:
          SignalBase( std::string signal_name, Type_ID type_id  );
+		 SignalBase( std::string signal_name, Type_ID type_id, SignalingClass* const signaling_parent );
+		 virtual ~SignalBase();
+
+		 std::string SignalName();
+		 SignalingClass* const SignalingParent();
 
       protected:
 
@@ -270,7 +290,7 @@ namespace sanyan
             return ret;
          }
 
-         std::string SignalName();
+         
          Type_ID SignalType();
 
          protected:
@@ -286,6 +306,7 @@ namespace sanyan
 
          std::vector < SlotBase* > sanyan_slots_;
          std::string  signal_name_;
+		 SignalingClass* const signaling_parent_;
          Type_ID type_ID_;
 	};
 
@@ -299,6 +320,11 @@ namespace sanyan
             : SignalBase( signal_name, typeid( T ).hash_code() )
          {
          }
+
+		 Signal(std::string signal_name, SignalingClass* const signaling_parent)
+			 : SignalBase(signal_name, typeid(T).hash_code(), signaling_parent)
+		 {
+		 }
 
          bool Connect( SlotBase& slot_base )
          {

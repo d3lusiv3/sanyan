@@ -2,6 +2,8 @@
 
 namespace sanyan
 {
+   
+
 
    Unique_ID_Type SlotBase::slot_uuid_generator_ = 0;
 
@@ -19,19 +21,20 @@ namespace sanyan
    SlotBase::SlotBase( std::string slot_name, Type_ID type_ID, void( *base_function_pointer_ )( void* ) )
 		:  slot_name_          ( slot_name )
 		 , type_ID_            ( type_ID )
-       , base_function_pointer_( base_function_pointer_ )
-       , uuid_( ++slot_uuid_generator_ )
+         , base_function_pointer_( base_function_pointer_ )
+         , uuid_( ++slot_uuid_generator_ )
+		 , slotted_parent_( nullptr )
 	{
 
 	}
 
-   SlotBase::SlotBase( std::string slot_name, Type_ID type_ID, const SlottedClass* slotted_parent )
+   SlotBase::SlotBase( std::string slot_name, Type_ID type_ID, SlottedClass* const slotted_parent )
       : slot_name_      ( slot_name )
       , type_ID_        ( type_ID )
       , slotted_parent_ ( slotted_parent )
       , uuid_( ++slot_uuid_generator_ )
    {
-      
+	   slotted_parent->RegisterSlot(this);
    }
 
    SlotBase::~SlotBase()
@@ -40,7 +43,9 @@ namespace sanyan
             sbIT != connectedSignals_.end( );
             ++sbIT )
       {
-         ( *sbIT )->RemoveSlotOnDestructionBase( this );
+
+	     (*sbIT)->RemoveSlotOnDestructionBase(this);
+
       }
       connectedSignals_.clear();
    }
@@ -56,6 +61,12 @@ namespace sanyan
    SlotBase::SlotType()
    {
       return type_ID_;
+   }
+
+   SlottedClass* const
+   SlotBase::SlottedParent()
+   {
+	   return slotted_parent_;
    }
 
 	void
@@ -75,7 +86,7 @@ namespace sanyan
       return ret;
    }
    bool
-      SlotBase::operator==( const SlotBase* rhs )
+   SlotBase::operator==( const SlotBase* rhs )
    {
          bool ret = false;
          if( uuid_ == rhs->UUID( ) )
@@ -83,7 +94,7 @@ namespace sanyan
             ret = true;
          }
          return ret;
-      }
+   }
 
    bool
    SlotBase::operator==( void( * const function_pointer )( void* ) )
@@ -104,16 +115,44 @@ namespace sanyan
 
 	//private blocked default constructor
 	SlotBase::SlotBase()
+		: slotted_parent_( nullptr )
 	{
 
+	}
+
+	SignalingClass::SignalingClass()
+	{
+
+	}
+
+	void
+	SignalingClass::RegisterSignal(SignalBase* signal_base )
+	{
+		signals_[signal_base->SignalName()] = signal_base;
 	}
 
 	SignalBase::SignalBase( std::string signal_name, Type_ID type_id )
 		: signal_name_( signal_name )
 		, type_ID_( type_id )
+		, signaling_parent_( nullptr )
 	{
-
 	}
+
+	SignalBase::SignalBase(std::string signal_name, Type_ID type_id, SignalingClass* const signaling_parent )
+		: signal_name_(signal_name)
+		, type_ID_(type_id)
+		, signaling_parent_(signaling_parent )
+	{
+		signaling_parent_->RegisterSignal( this );
+	}
+
+   SignalBase::~SignalBase()
+   {
+	   for (int s = 0; s < sanyan_slots_.size(); ++s)
+	   {
+		   sanyan_slots_[s]->UnregisterSignalBase(this);
+	   }
+   }
 
    std::string
    SignalBase::SignalName()
@@ -121,7 +160,16 @@ namespace sanyan
       return signal_name_;
    }
 
+   SignalingClass* const
+   SignalBase::SignalingParent()
+   {
+	  return signaling_parent_;
+   }
+
    SignalBase::SignalBase( )
+	   : signal_name_( "" )
+	   , type_ID_( -1 )
+	   , signaling_parent_( nullptr )
    {
    }
 
