@@ -3,6 +3,8 @@
 namespace sanyan
 {
 
+   Unique_ID_Type SlotBase::slot_uuid_generator_ = 0;
+
 	SlottedClass::SlottedClass()
 	{
 
@@ -14,10 +16,11 @@ namespace sanyan
       slots_[ slot_base->SlotName() ] = slot_base;
 	}
 
-	SlotBase::SlotBase( std::string slot_name, Type_ID type_ID, Function_ID_Type receive_function_id )
+   SlotBase::SlotBase( std::string slot_name, Type_ID type_ID, void( *base_function_pointer_ )( void* ) )
 		:  slot_name_          ( slot_name )
 		 , type_ID_            ( type_ID )
-		 , receive_function_id_( receive_function_id )
+       , base_function_pointer_( base_function_pointer_ )
+       , uuid_( ++slot_uuid_generator_ )
 	{
 
 	}
@@ -26,8 +29,20 @@ namespace sanyan
       : slot_name_      ( slot_name )
       , type_ID_        ( type_ID )
       , slotted_parent_ ( slotted_parent )
+      , uuid_( ++slot_uuid_generator_ )
    {
       
+   }
+
+   SlotBase::~SlotBase()
+   {
+      for( std::vector< SignalBase* >::iterator sbIT = connectedSignals_.begin( );
+            sbIT != connectedSignals_.end( );
+            ++sbIT )
+      {
+         ( *sbIT )->RemoveSlotOnDestructionBase( this );
+      }
+      connectedSignals_.clear();
    }
 
    
@@ -48,6 +63,44 @@ namespace sanyan
 	{
       Receive( arguments );
 	}
+
+   bool
+   SlotBase::operator==( const SlotBase& rhs )
+   {
+      bool ret = false;
+      if( uuid_ == rhs.UUID() )
+      {
+         ret = true;
+      }
+      return ret;
+   }
+   bool
+      SlotBase::operator==( const SlotBase* rhs )
+   {
+         bool ret = false;
+         if( uuid_ == rhs->UUID( ) )
+         {
+            ret = true;
+         }
+         return ret;
+      }
+
+   bool
+   SlotBase::operator==( void( * const function_pointer )( void* ) )
+   {
+      bool ret = false;
+      if( base_function_pointer_ == function_pointer )
+      {
+         ret = true;
+      }
+      return ret;
+   }
+
+   Unique_ID_Type
+   SlotBase::UUID() const
+   {
+      return uuid_;
+   }
 
 	//private blocked default constructor
 	SlotBase::SlotBase()

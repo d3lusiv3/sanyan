@@ -2,6 +2,8 @@
 #define __SANYAN_SIGSLOT_HPP
 
 
+//#define _SANYAN_EXTRA_DEBUG_INFO
+
 #include <unordered_map>
 #include <functional>
 #include <typeinfo>
@@ -25,11 +27,11 @@ namespace sanyan
 
 	//Define types to be used
 	using Type_ID = size_t;
-	using Function_ID_Type = intptr_t;
+   using Unique_ID_Type = unsigned long;
 
 	//forward declare slot base for deffinition of slotted class
    class SlotBase;
-
+   class SignalBase;
 	//inherit from this class if you want your class to contain slots
 	//that can be searchd and hooked up at run-time
 	class SlottedClass
@@ -42,26 +44,70 @@ namespace sanyan
          std::unordered_map< std::string, SlotBase* > slots_;
 	};
 
+   class SignalToSlotPrivateInterface
+   {
+      
+      private:
+         friend class SignalBase;
+         void RegisterSignalBase( SignalBase* signal ) { RegisterSignal( signal ); }
+         virtual void RegisterSignal( SignalBase* signal ) = 0;
+         void UnregisterSignalBase( SignalBase* signal ) { UnregisterSignal( signal ); }
+         virtual void UnregisterSignal( SignalBase* signal ) = 0;
+   };
+
+   class SlotToSignalPrivateInterface
+   {
+      private:
+         friend class SlotBase;
+         void RemoveSlotOnDestructionBase( SlotBase* slot_base ) { RemoveSlotOnDestruction( slot_base ); }
+         virtual void RemoveSlotOnDestruction( SlotBase* slot_base ) = 0;
+   };
+
 	//Base class for a slot
-	class SlotBase
+   class SlotBase : public SignalToSlotPrivateInterface
 	{
 	   public:
-		   SlotBase( std::string slot_name, Type_ID type_ID, Function_ID_Type receive_function_id );
+           SlotBase( std::string slot_name, Type_ID type_ID, void( *base_function_pointer_ )( void* ) );
            SlotBase( std::string slot_name, Type_ID type_ID, const SlottedClass* slotted_parent );
 		
+           virtual ~SlotBase();
            std::string SlotName();
            Type_ID SlotType();
            void ReceiveBase( const void* arguments );
-      
+           Unique_ID_Type UUID() const;
+           
+           bool operator==( const SlotBase& rhs );
+           bool operator==( const SlotBase* rhs );
+           bool operator==( void( * const function_pointer )( void* ) );
 
            virtual void Receive( const void*  arguments ) = 0;
-
+           
+           
       private:
+
+         virtual void RegisterSignal( SignalBase* signal ) override { connectedSignals_.push_back( signal ); }
+         virtual void UnregisterSignal( SignalBase* signal ) override 
+         {
+            for( std::vector< SignalBase* >::iterator sbIT = connectedSignals_.begin();
+                 sbIT != connectedSignals_.end();
+                 ++sbIT )
+            {
+               if( ( *sbIT ) == signal )
+               {
+                  connectedSignals_.erase( sbIT );
+                  break;
+               }
+            }
+         }
+
 		   SlotBase();
 		   std::string slot_name_;
 		   Type_ID type_ID_;
 		   const SlottedClass* slotted_parent_;
-		   Function_ID_Type receive_function_id_;
+         void( *base_function_pointer_ )( void* );
+         static Unique_ID_Type slot_uuid_generator_;
+         Unique_ID_Type uuid_;
+         std::vector< SignalBase* > connectedSignals_;
 	};
 
    //Inherit from this class if you want to have a named slot that can be grouped
@@ -71,7 +117,7 @@ namespace sanyan
    class InheritableSlot : public SlotBase
    {
       public:
-		  InheritableSlot(std::string slot_name) : SlotBase(slot_name, typeid(T).hash_code(), (intptr_t)&InheritableSlot::OnReceived) {}
+         InheritableSlot( std::string slot_name ) : SlotBase( slot_name, typeid( T ).hash_code( ),  (void( * )( void* ))nullptr ) {}
 
          virtual void Receive( const void* arguments ) override
          {
@@ -92,7 +138,7 @@ namespace sanyan
    class FunctinalSlot : public SlotBase
    {
 	 public:
-		 FunctinalSlot( std::string slot_name, void( *function_pointer )( T ) ) : SlotBase( slot_name, typeid( T ).hash_code() ), function_pointer_( function_pointer ){}
+       FunctinalSlot( std::string slot_name, void( *function_pointer )( T ) ) : SlotBase( slot_name, typeid( T ).hash_code( ), ( void( *)( void* ) )function_pointer ), function_pointer_( function_pointer ) {}
 
 		 virtual void Receive( const void* arguments ) override
 		 {
@@ -141,18 +187,104 @@ namespace sanyan
    };
 
 	//Base Class for a signal
-	class SignalBase
+   class SignalBase : public SlotToSignalPrivateInterface
 	{
 	   public:
          SignalBase( std::string signal_name, Type_ID type_id  );
 
-         virtual void Emit( void* arguments ) = 0;
+      protected:
+
+         void BaseEmit( void* arguments )
+         {
+            for( int s = 0; s < sanyan_slots_.size( ); ++s )
+            {
+               sanyan_slots_[ s ]->ReceiveBase( arguments );
+            }
+         }
+
+         bool BaseConnect( SlotBase* slot_base )
+         {
+            bool ret = false;
+            if( slot_base->SlotType( ) == SignalType( ) )
+            {
+               ret = true;
+               sanyan_slots_.push_back( slot_base );
+               slot_base->RegisterSignalBase( this );
+            }
+            else
+            {
+               //TODO: Throw an error about type mismatch
+            }
+            return ret;
+         }
+
+         bool BaseConnect( SlotBase& slot_base )
+         {
+            bool ret = false;
+            if( slot_base.SlotType( ) == SignalType( ) )
+            {
+               sanyan_slots_.push_back( &slot_base );
+               slot_base.RegisterSignalBase( this );
+               ret = true;
+            }
+            else
+            {
+               //TODO: Throw an error about type mismatch
+            }
+            return ret;
+         }
+
+         bool BaseDisconnect( void( *function_pointer )( void* )  )
+         {
+            bool ret = false;
+            for( std::vector < SlotBase* >::iterator ssIT = sanyan_slots_.begin( );
+                 ssIT != sanyan_slots_.end( );
+                 ++ssIT )
+            {
+               if( *( *ssIT ) == function_pointer )
+               {
+                  sanyan_slots_.erase( ssIT );
+                  ret = true;
+                  break;
+               }
+            }
+
+            return ret;
+         }
+
+         bool BaseDisconnect( SlotBase* slot_base )
+         {
+            bool ret = false;
+            for( std::vector < SlotBase* >::iterator ssIT = sanyan_slots_.begin( );
+                 ssIT != sanyan_slots_.end( );
+                 ++ssIT )
+            {
+               if( *( *ssIT ) == slot_base )
+               {
+                  sanyan_slots_.erase( ssIT );
+                  ret = true;
+                  break;
+               }
+            }
+
+            return ret;
+         }
 
          std::string SignalName();
          Type_ID SignalType();
 
+         protected:
+         
+
       private:
          SignalBase();
+
+         virtual void RemoveSlotOnDestruction( SlotBase* slot_base ) override
+         {
+            BaseDisconnect( slot_base );
+         }
+
+         std::vector < SlotBase* > sanyan_slots_;
          std::string  signal_name_;
          Type_ID type_ID_;
 	};
@@ -168,27 +300,17 @@ namespace sanyan
          {
          }
 
-         virtual void Emit( void* arguments ) override
+         bool Connect( SlotBase& slot_base )
          {
-            for( int s = 0; s < sanyan_slots_.size( ); ++s )
-            {
-               sanyan_slots_[ s ]->ReceiveBase( arguments );
-            }
+            return BaseConnect( slot_base );
          }
 
          bool Connect( SlotBase* slot_base )
          {
-            if( slot_base->SlotType() == SignalType() )
-            {
-               sanyan_slots_.push_back( slot_base );
-            }
-			else
-			{
-				//TODO: Throw an error about type mismatch
-			}
+            return BaseConnect( slot_base );
          }
 
-		 bool Connect( void( function_pointer )( T ) )
+		 bool Connect( void( *function_pointer )( T ) )
 		 {
 			 bool ret = false;
 
@@ -198,8 +320,8 @@ namespace sanyan
 				 //we create a nameless functional slot here
 				 //TODO: also create a connect that allows to pass
 				 //in a function pointer and a name for the slot
-				 sanyan_slots_.push_back(new FunctinalSlot< T >( "", function_pointer ) );
-				 ret = true;
+				 //sanyan_slots_.push_back(new FunctinalSlot< T >( "", function_pointer ) );
+             ret = BaseConnect( new FunctinalSlot< T >( "", function_pointer ) );
 			 }
 			 else
 			 {
@@ -209,33 +331,22 @@ namespace sanyan
 			 return ret;
 		 }
 
-		 bool Disconnect( void( function_pointer  )( T ) )
+		 bool Disconnect( void( *function_pointer  )( T ) )
 		 {
 			 bool ret = false;
-
-			 for( std::vector < SlotBase* >::iterator ssIT = sanyan_slots_.begin();
-				 ssIT != sanyan_slots_.end();
-				 ++ssIT)
-			 {
-				 if( (*ssIT) == function_pointer )
-				 {
-					 sanyan_slots_.erase( ssIT );
-					 ret = true;
-					 break;
-				 }
-			 }
+          ret = BaseDisconnect( ( void( *)( void* ) )function_pointer ); 
+          return ret;
 		 }
 
          void operator()( T arguments )
          {
 
-            Emit( ( void* )&arguments );
+            BaseEmit( ( void* )&arguments );
          }
 
       private:
          Signal(){};
-
-         std::vector < SlotBase* > sanyan_slots_;
+        
    };
 
 }

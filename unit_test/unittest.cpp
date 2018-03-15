@@ -21,6 +21,11 @@ void DoubleSlotD( double d )
 	}
 }
 
+void DoubleSlotEmpty( double d )
+{
+
+}
+
 class DoubleInheritedSlot : public sanyan::InheritableSlot< double >
 {
 public:
@@ -57,9 +62,10 @@ int main()
 	TESTINFO("Double Signal LVALUE -> Functional Slot");
 	double doubleLvalue = 243.537;
 	DoubleSig(doubleLvalue);
-	TESTINFO("Disconnect Functional Double Slot from Double Signal");
-	double disconnected = DoubleSig.Disconnect(DoubleSlotD);
-	if (disconnected)
+   TESTINFO( "Disconnect double functional slot that WASNT previously hooked up");
+   double disconnected = true;
+   disconnected = DoubleSig.Disconnect( DoubleSlotEmpty );
+	if (!disconnected)
 	{
 		TESTPASSED;
 	}
@@ -67,9 +73,49 @@ int main()
 	{
 		TESTFAILED;
 	}
-	TESTINFO("Double Sig RVALUE -> Double InheritedSlot");
-	DoubleInheritedSlot diss;
-	
+   TESTINFO( "Disconnect double functional slot that WAS previously hooked up" );
+   disconnected = false;
+   disconnected = DoubleSig.Disconnect( DoubleSlotD ); 
+   if( disconnected )
+   {
+      TESTPASSED;
+   }
+   else
+   {
+      TESTFAILED;
+   }
+   TESTINFO( "Double Disconnect double functional slot that WAS previously hooked up" );
+   disconnected = false;
+   disconnected = DoubleSig.Disconnect( DoubleSlotD );
+   if( !disconnected )
+   {
+      TESTPASSED;
+   }
+   else
+   {
+      TESTFAILED;
+   }
+
+   {
+      DoubleInheritedSlot dis;
+      TESTINFO( "Connecting Double InheritetdSlot class to double signal" );
+      connected = false;
+      connected = DoubleSig.Connect( dis );
+      if( connected )
+      {
+         TESTPASSED;
+      }
+      else
+      {
+         TESTFAILED;
+      }
+      TESTINFO( "Double Signal to Double Inherited Slot");
+      DoubleSig( doubleLvalue );
+   }
+   TESTINFO( "Double Signal to Double Inherited Slot That was destructed" );
+   DoubleSig( doubleLvalue );
+   //if we dont segfault here we passed
+   TESTPASSED;
 
 
 	int stop;
