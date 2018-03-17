@@ -13,9 +13,17 @@ namespace sanyan
 	}
 
 	void
-      SlottedClass::RegisterSlot( SlotBase* slot_base )
+    SlottedClass::RegisterSlot( SlotBase* slot_base )
 	{
       slots_[ slot_base->SlotName() ] = slot_base;
+	}
+
+	SlotBase*
+	SlottedClass::GetSlot( std::string name )
+	{
+		SlotBase* ret = nullptr;
+		ret = slots_[ name ];
+		return ret;
 	}
 
    SlotBase::SlotBase( std::string slot_name, Type_ID type_ID, void( *base_function_pointer_ )( void* ) )
@@ -39,26 +47,32 @@ namespace sanyan
 
    SlotBase::~SlotBase()
    {
-      for( std::vector< SignalBase* >::iterator sbIT = connectedSignals_.begin( );
-            sbIT != connectedSignals_.end( );
-            ++sbIT )
+
+      std::vector< SignalBase* >::iterator csIT = connectedSignals_.begin();
+      while( csIT != connectedSignals_.end() )
       {
-
-	     (*sbIT)->RemoveSlotOnDestructionBase(this);
-
+         SignalBase* signal = (*csIT );
+         //erase first
+         connectedSignals_.erase( csIT );
+         //then call signals remove slot destruction, we do this order
+         //because the signal may or may not callback on this slot with an
+         //unregister signal from slot
+         signal->RemoveSlotOnDestructionBase( this );
+         csIT = connectedSignals_.begin();
       }
+      //removeslotondestructionbase
       connectedSignals_.clear();
    }
 
    
    std::string
-   SlotBase::SlotName()
+   SlotBase::SlotName() const
    {
       return slot_name_;
    }
 
    Type_ID
-   SlotBase::SlotType()
+   SlotBase::SlotType() const
    {
       return type_ID_;
    }
@@ -131,6 +145,14 @@ namespace sanyan
 		signals_[signal_base->SignalName()] = signal_base;
 	}
 
+	SignalBase*
+	SignalingClass::GetSignal(std::string signal_name)
+	{
+		SignalBase* ret = nullptr;
+		ret = signals_[ signal_name ];
+		return ret;
+	}
+
 	SignalBase::SignalBase( std::string signal_name, Type_ID type_id )
 		: signal_name_( signal_name )
 		, type_ID_( type_id )
@@ -155,12 +177,12 @@ namespace sanyan
    }
 
    std::string
-   SignalBase::SignalName()
+   SignalBase::SignalName() const
    {
       return signal_name_;
    }
 
-   SignalingClass* const
+   SignalingClass*
    SignalBase::SignalingParent()
    {
 	  return signaling_parent_;
@@ -174,10 +196,62 @@ namespace sanyan
    }
 
    Type_ID
-   SignalBase::SignalType()
+   SignalBase::SignalType() const
    {
       return type_ID_;
    }
 
+
+   bool
+   CONNECT( SignalingClass* signal_class, std::string signal_name, SlottedClass* slot_class, std::string slot_name )
+   {
+
+      bool ret = false;
+      if( signal_class && slot_class )
+      {
+         SlotBase* slot = slot_class->GetSlot( slot_name );
+         SignalBase* signal = signal_class->GetSignal( signal_name );
+         if( slot && signal )
+         {
+            ret = signal->BaseConnect( slot );
+         }
+         else
+         {
+            //TODO: throw, either slot or signal was not present
+         }
+      }
+      else
+      {
+         //TODO: throw, signal or slot not valid object
+      }
+      
+      return ret;
+   }
+
+   bool
+   DISCONNECT( SignalingClass* signal_class, std::string signal_name, SlottedClass* slot_class, std::string slot_name )
+   {
+
+      bool ret = false;
+      if( signal_class && slot_class )
+      {
+         SlotBase* slot = slot_class->GetSlot( slot_name );
+         SignalBase* signal = signal_class->GetSignal( signal_name );
+         if( slot && signal )
+         {
+            ret = signal->BaseDisconnect( slot );
+         }
+         else
+         {
+            //TODO: throw, either slot or signal was not present
+         }
+      }
+      else
+      {
+         //TODO: throw, signal or slot not valid object
+      }
+      
+      return ret;
+   }
 
 }

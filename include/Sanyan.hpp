@@ -44,6 +44,7 @@ namespace sanyan
 	   public:
 		   SlottedClass();
          void RegisterSlot( SlotBase* slot_base );
+		   SlotBase* GetSlot( std::string slot_name );
 
 	   private:
          std::unordered_map< std::string, SlotBase* > slots_;
@@ -76,8 +77,8 @@ namespace sanyan
            SlotBase( std::string slot_name, Type_ID type_ID, SlottedClass* const slotted_parent );
 
            virtual ~SlotBase();
-           std::string SlotName();
-           Type_ID SlotType();
+           std::string SlotName() const;
+           Type_ID SlotType() const;
            void ReceiveBase( const void* arguments );
            Unique_ID_Type UUID() const;
            
@@ -196,6 +197,7 @@ namespace sanyan
       public:
 		  SignalingClass();
 		  void RegisterSignal(SignalBase* signal_base);
+		  SignalBase* GetSignal( std::string signal_name );
       private:
 		  std::unordered_map< std::string, SignalBase* > signals_;
 
@@ -206,13 +208,12 @@ namespace sanyan
 	{
 	   public:
          SignalBase( std::string signal_name, Type_ID type_id  );
-		 SignalBase( std::string signal_name, Type_ID type_id, SignalingClass* const signaling_parent );
-		 virtual ~SignalBase();
+		   SignalBase( std::string signal_name, Type_ID type_id, SignalingClass* const signaling_parent );
+		   virtual ~SignalBase();
 
-		 std::string SignalName();
-		 SignalingClass* const SignalingParent();
-
-      protected:
+         Type_ID SignalType() const;
+		   std::string SignalName() const;
+		   SignalingClass* SignalingParent();
 
          void BaseEmit( void* arguments )
          {
@@ -263,6 +264,7 @@ namespace sanyan
             {
                if( *( *ssIT ) == function_pointer )
                {
+                  
                   sanyan_slots_.erase( ssIT );
                   ret = true;
                   break;
@@ -281,6 +283,7 @@ namespace sanyan
             {
                if( *( *ssIT ) == slot_base )
                {
+                  slot_base->UnregisterSignalBase( this );
                   sanyan_slots_.erase( ssIT );
                   ret = true;
                   break;
@@ -291,9 +294,8 @@ namespace sanyan
          }
 
          
-         Type_ID SignalType();
+         
 
-         protected:
          
 
       private:
@@ -326,6 +328,19 @@ namespace sanyan
 		 {
 		 }
 
+		 //one shot convenience signal to SlotBase
+		 Signal( const SlotBase& receiving_slot, T value)
+			 : SignalBase("", typeid(T).hash_code() )
+		 {
+			 receiving_slot.Receive(value);
+		 }
+
+		 Signal( void(*function_pointer)(T), T value )
+			 : SignalBase("", typeid(T).hash_code() )
+		 {
+			 *function_pointer(value);
+		 }
+
          bool Connect( SlotBase& slot_base )
          {
             return BaseConnect( slot_base );
@@ -346,8 +361,8 @@ namespace sanyan
 				 //we create a nameless functional slot here
 				 //TODO: also create a connect that allows to pass
 				 //in a function pointer and a name for the slot
-				 //sanyan_slots_.push_back(new FunctinalSlot< T >( "", function_pointer ) );
-             ret = BaseConnect( new FunctinalSlot< T >( "", function_pointer ) );
+				 //TODO: we need to delete this new or we have a memory leak
+				 ret = BaseConnect( new FunctinalSlot< T >( "", function_pointer ) );
 			 }
 			 else
 			 {
@@ -374,6 +389,9 @@ namespace sanyan
          Signal(){};
         
    };
+
+ bool CONNECT( SignalingClass* signal_class, std::string signal_name, SlottedClass* slot_class, std::string slot_name );
+ bool DISCONNECT( SignalingClass* signal_class, std::string signal_name, SlottedClass* slot_class, std::string slot_name );
 
 }
 
