@@ -8,6 +8,7 @@
 #include <functional>
 #include <typeinfo>
 
+
 #ifdef _DEBUG
 #ifdef _SANYAN_EXTRA_DEBUG_INFO
 #include <iostream>
@@ -20,10 +21,15 @@
 #define SANYAN_DEBUG_INFO( msg )
 #endif
 
-#define MEMBERSLOT( name, type, parentClass )  void name( type ); \
-sanyan::MemberSlot< type,  parentClass > name##Slot = { #name, this, &parentClass::name }
+//#define SIGNAL( name ) sanyan::Signal<> name = { #name }
 
-#define MEMBERSIGNAL( name, type, parentClass ) sanyan::Signal< type > name = { #name, this }
+//#define MEMBERSIGNAL( name, parentClass ) sanyan::Signal<> name = { #name, this }
+#define MEMBERSIGNALARGS( name, type, parentClass ) sanyan::Signal< type > name = { #name, this }
+
+#define MEMBERSLOT( name, type, parentClass )  void name( type ); \
+   sanyan::MemberSlot< type, parentClass > name##Slot = { #name, this, &parentClass::name }
+
+
 
 namespace sanyan
 {
@@ -109,7 +115,7 @@ namespace sanyan
 		 SlotBase();
 	     std::string slot_name_;
          Type_ID type_ID_;
-	     SlottedClass* const slotted_parent_;
+	      SlottedClass* const slotted_parent_;
          void( *base_function_pointer_ )( void* );
          static Unique_ID_Type slot_uuid_generator_;
          Unique_ID_Type uuid_;
@@ -168,6 +174,35 @@ namespace sanyan
 		  void( *function_pointer_ )( T );
    };
 
+   template < >
+   class FunctinalSlot< void > : public SlotBase
+   {
+   public:
+      //we use 0 as typeid to represent void
+      FunctinalSlot( std::string slot_name, void( *function_pointer )( void ) ) : SlotBase( slot_name, 0, ( void( *)( void* ) )function_pointer ), function_pointer_( function_pointer ) {}
+
+      virtual void Receive( const void* arguments ) override
+      {
+
+         ( *function_pointer_ )(  );
+      }
+
+      bool operator==( void( *rhs )( void ) )
+      {
+         bool ret = false;
+         if( function_pointer_ == rhs )
+         {
+            ret = true;
+         }
+         return ret;
+      }
+
+   private:
+      //FunctinalSlot( ) {}
+      void( *function_pointer_ )( void );
+   };
+
+
    template < class T, class C >
    class MemberSlot : public SlotBase
    {
@@ -191,6 +226,33 @@ namespace sanyan
          C* const callback_parent_object_;
          void( C::*member_function_callback_ )( T );
    };
+
+   template < class C >
+   class MemberSlot< void, C > : public SlotBase
+   {
+   public:
+      //we use 0 to represent void as typeid
+      MemberSlot( std::string slot_name, C* const callback_parent_object, void( C::*member_function_callback )(  ) ) : SlotBase( slot_name, 0, callback_parent_object ), callback_parent_object_( callback_parent_object ), member_function_callback_( member_function_callback ) {};
+
+      virtual void Receive( const void* arguments ) override
+      {
+
+
+         OnReceived(  );
+      }
+
+      void OnReceived(  )
+      {
+         ( callback_parent_object_->*member_function_callback_ )( void );
+      }
+
+   private:
+      MemberSlot( ) {}
+      C* const callback_parent_object_;
+      void( C::*member_function_callback_ )( void );
+   };
+
+
 
    class SignalingClass
    {
@@ -318,10 +380,10 @@ namespace sanyan
 
       public:
 
-         Signal( std::string signal_name )
-            : SignalBase( signal_name, typeid( T ).hash_code() )
-         {
-         }
+      Signal( std::string signal_name )
+         : SignalBase( signal_name, typeid( T ).hash_code() )
+      {
+      }
 
 		 Signal(std::string signal_name, SignalingClass* const signaling_parent)
 			 : SignalBase(signal_name, typeid(T).hash_code(), signaling_parent)
@@ -372,6 +434,7 @@ namespace sanyan
 			 return ret;
 		 }
 
+
 		 bool Disconnect( void( *function_pointer  )( T ) )
 		 {
 			 bool ret = false;
@@ -379,15 +442,100 @@ namespace sanyan
           return ret;
 		 }
 
-         void operator()( T arguments )
-         {
+       
 
-            BaseEmit( ( void* )&arguments );
-         }
+      void operator()( T arguments )
+      {
+
+         BaseEmit( ( void* )&arguments );
+      }
 
       private:
          Signal(){};
         
+   };
+
+   template < >
+   class Signal< void > : public SignalBase
+   {
+
+   public:
+
+      Signal( std::string signal_name )
+         : SignalBase( signal_name, 0 )
+      {
+      }
+
+      Signal( std::string signal_name, SignalingClass* const signaling_parent )
+         : SignalBase( signal_name, 0, signaling_parent )
+      {
+      }
+
+      //one shot convenience signal to SlotBase
+      Signal( SlotBase& receiving_slot )
+         : SignalBase( "", 0 )
+      {
+         char buff;
+         receiving_slot.Receive( (void*)&buff );
+      }
+
+      Signal( void( *function_pointer )( void ) )
+         : SignalBase( "", 0 )
+      {
+         
+         (*function_pointer)(  );
+      }
+
+      bool Connect( SlotBase& slot_base )
+      {
+         return BaseConnect( slot_base );
+      }
+
+      bool Connect( SlotBase* slot_base )
+      {
+         return BaseConnect( slot_base );
+      }
+
+      bool Connect( void( *function_pointer )( void ) )
+      {
+         bool ret = false;
+
+         SANYAN_DEBUG_INFO( "HASHES: " << typeid( T ).hash_code( ) << " :: " << SignalType( ) << std::endl );
+         if( ((Type_ID)0) == SignalType( ) )
+         {
+            //we create a nameless functional slot here
+            //TODO: also create a connect that allows to pass
+            //in a function pointer and a name for the slot
+            //TODO: we need to delete this new or we have a memory leak
+            ret = BaseConnect( new FunctinalSlot<void>( "", function_pointer ) );
+         }
+         else
+         {
+            //TODO: Throw an error about type mismatch
+            ret = false;
+         }
+         return ret;
+      }
+
+
+      bool Disconnect( void( *function_pointer )( void ) )
+      {
+         bool ret = false;
+         ret = BaseDisconnect( ( void( *)( void* ) )function_pointer );
+         return ret;
+      }
+
+
+
+      void operator()( )
+      {
+         char noargs;
+         BaseEmit( ( void* )&noargs );
+      }
+
+   private:
+      //Signal( ) {};
+
    };
 
  bool CONNECT( SignalingClass* signal_class, std::string signal_name, SlottedClass* slot_class, std::string slot_name );

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <string>
 #include "Sanyan.hpp"
 
 #define TESTPASSED std::cout << "PASSED" << std::endl
@@ -48,9 +49,11 @@ class MemberSlotTester : public sanyan::SignalingClass, public sanyan::SlottedCl
 {
 public:
 	MEMBERSLOT(DoubleReceive, double, MemberSlotTester);
-	MEMBERSIGNAL(DoubleUpdate, double, MemberSlotTester);
-	MEMBERSIGNAL(DoublePUpdate, double*, MemberSlotTester);
+	MEMBERSIGNALARGS(DoubleUpdate, double, MemberSlotTester);
+	MEMBERSIGNALARGS(DoublePUpdate, double*, MemberSlotTester);
 	MEMBERSLOT(DoublePReceive, double*, MemberSlotTester);
+
+
 	
 };
 
@@ -67,23 +70,59 @@ MemberSlotTester::DoubleReceive(double d)
 	}
 }
 
+void SimpleSlotFunction()
+{
+   TESTPASSED;
+}
+
+void SimpleSlotFunction2()
+{
+   TESTPASSED;
+}
+
+//SIGNAL( SimpleSignal );
+//sanyan::Signal<> test( "test");
+
 void
 MemberSlotTester::DoublePReceive(double* v)
 {
 	*v = 69.69;
 }
 
+void foovoid( void* args )
+{
+
+}
+
+
+
 int main()
 {
-	
+
+   bool connected = false;
+   TESTINFO( "Connecting void signal to void function pointer" );
+   sanyan::Signal<void> voidSignal( "EmptySignal");
+   connected = voidSignal.Connect( &SimpleSlotFunction );
+   if( connected ) { TESTPASSED; }else {TESTFAILED;}
+   //TESTINFO( "Connecting void signal to non-void function pointer" );
+   //uncommment this to make sure you can not compile this 
+   //connected = voidSignal.Connect( &DoubleSlotEmpty );
+   //uncomment this to make sure you can not compile
+   //sanyan::FunctinalSlot<void> voidSlot( "EmptySlot", &DoubleSlotEmpty );
+   TESTINFO( "disconnecting previously NOT connected void function from void signal" );
+   connected = voidSignal.Disconnect( &SimpleSlotFunction2 );
+   if( !connected ) { TESTPASSED; }else { TESTFAILED; }
+   TESTINFO( "disconnecting previously connected void function from void signal" );
+   connected = voidSignal.Disconnect( &SimpleSlotFunction );
+   if( connected ) { TESTPASSED; } else { TESTFAILED; }
+   
 	MemberSlotTester* mstP = new MemberSlotTester();
 	sanyan::SlottedClass* scP = mstP;
 	sanyan::SignalingClass* sigP = mstP;
-	std::cout << sizeof(sanyan::SlottedClass);
 
 	sanyan::Signal< double > DoubleSig( "DoubleSig" );
 	TESTINFO("Connecting Functional Double Slot -> Double Signal");
-	bool connected = DoubleSig.Connect( DoubleSlotD );
+	connected = DoubleSig.Connect( DoubleSlotD );
 	if (connected){ TESTPASSED; }else{ TESTFAILED; }
 	TESTINFO("Double Signal RVALUE -> Functional Slot");
 	DoubleSig( 243.537 );
