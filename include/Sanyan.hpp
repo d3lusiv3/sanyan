@@ -17,7 +17,7 @@
 #else
 #define SANYAN_DEBUG_INFO( msg )
 #endif
-#elif
+#else
 #define SANYAN_DEBUG_INFO( msg )
 #endif
 
@@ -151,10 +151,10 @@ namespace sanyan
    {
 	 public:
        FunctinalSlot( std::string slot_name, void( *function_pointer )( T ) ) : SlotBase( slot_name, typeid( T ).hash_code( ), ( void( *)( void* ) )function_pointer ), function_pointer_( function_pointer ) {}
-
+       
 		 virtual void Receive( const void* arguments ) override
 		 {
-			 T localCopy;
+          T localCopy;
 			 memcpy( (void*)&localCopy, arguments, sizeof( T ) );
 			 (*function_pointer_)( localCopy );
 		 }
@@ -277,12 +277,19 @@ namespace sanyan
 		   std::string SignalName() const;
 		   SignalingClass* SignalingParent();
 
+      //TODO: all base class implementations should be protected
+      //user should not be able to call these
+      //protected:
+         inline
          void BaseEmit( void* arguments )
          {
+            
             for( int s = 0; s < sanyan_slots_.size( ); ++s )
             {
                sanyan_slots_[ s ]->ReceiveBase( arguments );
             }
+            
+        
          }
 
          bool BaseConnect( SlotBase* slot_base )
@@ -422,7 +429,7 @@ namespace sanyan
 			 {
 				 //we create a nameless functional slot here
 				 //TODO: also create a connect that allows to pass
-				 //in a function pointer and a name for the slot
+				 //in a function pointfer and a name for the slot
 				 //TODO: we need to delete this new or we have a memory leak
 				 ret = BaseConnect( new FunctinalSlot< T >( "", function_pointer ) );
 			 }
@@ -442,13 +449,47 @@ namespace sanyan
           return ret;
 		 }
 
-       
+       bool Disconnect( SlotBase& slot_base )
+       {
+          bool ret = false;
+          ret = BaseDisconnect( slot_base );
+          return ret;
+       }
 
-      void operator()( T arguments )
+       bool Disconnect( SlotBase* slot_base )
+       {
+          bool ret = false;
+          ret = BaseDisconnect( slot_base );
+          return ret;
+       }
+       
+       inline
+      void operator()( T& arguments )
       {
 
          BaseEmit( ( void* )&arguments );
       }
+
+       inline
+          void operator()( const T& arguments )
+       {
+
+             BaseEmit( ( void* )&arguments );
+          }
+
+       inline
+          void operator()( T&& arguments )
+       {
+
+             BaseEmit( ( void* )&arguments );
+          }
+
+       inline
+          void operator()( const T&& arguments )
+       {
+
+             BaseEmit( ( void* )&arguments );
+          }
 
       private:
          Signal(){};
@@ -525,7 +566,19 @@ namespace sanyan
          return ret;
       }
 
+      bool Disconnect( SlotBase& slot_base )
+      {
+         bool ret = false;
+         ret = BaseDisconnect( &slot_base );
+         return ret;
+      }
 
+      bool Disconnect( SlotBase* slot_base )
+      {
+         bool ret = false;
+         ret = BaseDisconnect( slot_base );
+         return ret;
+      }
 
       void operator()( )
       {
@@ -540,6 +593,13 @@ namespace sanyan
 
  bool CONNECT( SignalingClass* signal_class, std::string signal_name, SlottedClass* slot_class, std::string slot_name );
  bool DISCONNECT( SignalingClass* signal_class, std::string signal_name, SlottedClass* slot_class, std::string slot_name );
+
+ inline void
+    SlotBase::ReceiveBase( const void* arguments )
+ {
+       Receive( arguments );
+    }
+
 
 }
 

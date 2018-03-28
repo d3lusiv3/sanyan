@@ -83,11 +83,8 @@ namespace sanyan
 	   return slotted_parent_;
    }
 
-	void
-	SlotBase::ReceiveBase( const void* arguments )
-	{
-      Receive( arguments );
-	}
+   
+
 
    bool
    SlotBase::operator==( const SlotBase& rhs )

@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <chrono>
 #include "Sanyan.hpp"
 
 #define TESTPASSED std::cout << "PASSED" << std::endl
@@ -22,10 +23,12 @@ void DoubleSlotD( double d )
 		TESTFAILED;
 	}
 }
-
+double ddd;
 void DoubleSlotEmpty( double d )
 {
-
+   //just to make sure compiler doesnt optimize it out, do something
+   d += 1.1;
+   ddd = d;
 }
 
 class DoubleInheritedSlot : public sanyan::InheritableSlot< double >
@@ -45,7 +48,21 @@ public:
 	}
 };
 
-class MemberSlotTester : public sanyan::SignalingClass, public sanyan::SlottedClass
+class TesterBase
+{
+   public:
+      void DoAll( double d )
+      {
+         for( int i = 0; i < all.size(); ++i )
+         {
+            all[ i ]->EmptyDouble( d );
+         }
+      }
+      virtual void EmptyDouble( double d ) = 0;
+      std::vector< TesterBase* > all;
+};
+
+class MemberSlotTester : public sanyan::SignalingClass, public sanyan::SlottedClass, public TesterBase
 {
 public:
 	MEMBERSLOT(DoubleReceive, double, MemberSlotTester);
@@ -53,6 +70,16 @@ public:
 	MEMBERSIGNALARGS(DoublePUpdate, double*, MemberSlotTester);
 	MEMBERSLOT(DoublePReceive, double*, MemberSlotTester);
 
+   MemberSlotTester()
+   {
+      all.push_back( this );
+   }
+   virtual void EmptyDouble( double d ) override
+   {
+      d += 1.1;
+   }
+
+   
 
 	
 };
@@ -77,7 +104,7 @@ void SimpleSlotFunction()
 
 void SimpleSlotFunction2()
 {
-   TESTPASSED;
+   TESTFAILED;
 }
 
 //SIGNAL( SimpleSignal );
@@ -99,22 +126,104 @@ void foovoid( void* args )
 int main()
 {
 
+   {
+      //do some timing benchmarks compared to other approaches
+      //first call a double passed in by copy
+      unsigned long long iterationsToRun = 10000000;
+
+     
+      double localDValue = 101.33;
+      MemberSlotTester mst;
+      TesterBase* tbP = &mst;
+
+      auto t1 = std::chrono::high_resolution_clock::now( );
+      for( unsigned long long i = 0; i < iterationsToRun; ++i )
+      {
+         tbP->DoAll( localDValue );
+      }
+      auto t2 = std::chrono::high_resolution_clock::now( );
+      double diff1 = ( double )std::chrono::duration_cast<std::chrono::nanoseconds>( t2 - t1 ).count( );
+      std::cout << "Benchmarking double pure virtual call by copy: "
+         << diff1
+         << " nanoseconds" << "which took: " << ( diff1 ) << " seconds" << std::endl;
+
+
+      sanyan::FunctinalSlot< double > fdslot( "bench_d_slot", &DoubleSlotEmpty );
+      sanyan::Signal< double > fdsignal( "bench_d_signal" );
+      fdsignal.Connect( fdslot );
+
+      t1 = std::chrono::high_resolution_clock::now( );
+      for( unsigned long long i = 0; i < iterationsToRun; ++i )
+      {
+         fdsignal( localDValue );
+      }
+      t2 = std::chrono::high_resolution_clock::now( );
+      double diff2 = ( double )std::chrono::duration_cast<std::chrono::nanoseconds>( t2 - t1 ).count( );
+      std::cout << "Benchmarking double functional signal to functional slot: "
+         << diff2
+         << " nanoseconds" << "which is: " << ( diff2 / diff1 ) << " times slower than baseline" << std::endl;
+
+
+
+
+   }
+
    bool connected = false;
-   TESTINFO( "Connecting void signal to void function pointer" );
-   sanyan::Signal<void> voidSignal( "EmptySignal");
-   connected = voidSignal.Connect( &SimpleSlotFunction );
-   if( connected ) { TESTPASSED; }else {TESTFAILED;}
-   //TESTINFO( "Connecting void signal to non-void function pointer" );
-   //uncommment this to make sure you can not compile this 
-   //connected = voidSignal.Connect( &DoubleSlotEmpty );
-   //uncomment this to make sure you can not compile
-   //sanyan::FunctinalSlot<void> voidSlot( "EmptySlot", &DoubleSlotEmpty );
-   TESTINFO( "disconnecting previously NOT connected void function from void signal" );
-   connected = voidSignal.Disconnect( &SimpleSlotFunction2 );
-   if( !connected ) { TESTPASSED; }else { TESTFAILED; }
-   TESTINFO( "disconnecting previously connected void function from void signal" );
-   connected = voidSignal.Disconnect( &SimpleSlotFunction );
-   if( connected ) { TESTPASSED; } else { TESTFAILED; }
+   {
+      TESTINFO( "Connecting void signal to void function pointer" );
+      sanyan::Signal<void> voidSignal( "EmptySignal");
+      connected = voidSignal.Connect( &SimpleSlotFunction );
+      if( connected ) { TESTPASSED; }else {TESTFAILED;}
+      //TESTINFO( "Connecting void signal to non-void function pointer" );
+      //uncommment this to make sure you can not compile this 
+      //connected = voidSignal.Connect( &DoubleSlotEmpty );
+      //uncomment this to make sure you can not compile
+      //sanyan::FunctinalSlot<void> voidSlot( "EmptySlot", &DoubleSlotEmpty );
+      TESTINFO( "disconnecting previously NOT connected void function from void signal" );
+      connected = voidSignal.Disconnect( &SimpleSlotFunction2 );
+      if( !connected ) { TESTPASSED; }else { TESTFAILED; }
+      TESTINFO( "disconnecting previously connected void function from void signal" );
+      connected = voidSignal.Disconnect( &SimpleSlotFunction );
+      if( connected ) { TESTPASSED; } else { TESTFAILED; }
+      TESTINFO( "Connecting, disconnectiong and emitting void signal to void function pointer" );
+      connected = true;
+      connected = voidSignal.Connect( &SimpleSlotFunction2 );
+      if( connected )
+      {
+         voidSignal.Disconnect( &SimpleSlotFunction2 );
+         voidSignal();
+         //if fail was not printed then we passed
+         TESTPASSED;
+      }
+      else
+      {
+         //we didnt connect, failed for some other reason
+         TESTFAILED;
+      }
+
+      sanyan::FunctinalSlot< void > voidFslot( "void slot", SimpleSlotFunction );
+      TESTINFO( "Void functional slot connecting to void signal" );
+      connected = false;
+      connected = voidSignal.Connect( voidFslot );
+      if( connected ) { TESTPASSED; }else { TESTFAILED; }
+      TESTINFO( "Void Signal to void functional slot" );
+      voidSignal();
+      TESTINFO( "Disconnecting void functional slot from void signal" );
+      connected = voidSignal.Disconnect( &voidFslot );
+      if( connected ) { TESTPASSED; }else { TESTFAILED; }
+      TESTINFO( "Signaling void signal to disconnected functional void slot" );
+      voidSignal();
+      //if got here we ok
+      TESTPASSED;
+      sanyan::FunctinalSlot< double >  doubleFSlot( "double slot", &DoubleSlotD );
+      TESTINFO( "Connecting void signal to double functional slot" );
+      connected = voidSignal.Connect( doubleFSlot );
+      if( !connected ) { TESTPASSED; }else { TESTFAILED; }
+      
+      
+
+      
+   }
    
 	MemberSlotTester* mstP = new MemberSlotTester();
 	sanyan::SlottedClass* scP = mstP;
@@ -231,16 +340,18 @@ int main()
    {
       MemberSlotTester mstR1;
       MemberSlotTester mstR2;
-      TESTINFO("Connecting non existint signal to existing slot");
+      TESTINFO( "Connecting non existint signal to existing slot" );
       connected = true;
       connected = sanyan::CONNECT( &mstR1, "DoesntExist", &mstR2, "DoubleReceive" );
-      if( !connected ){ TESTPASSED; }else{ TESTFAILED; }
+      if( !connected ) { TESTPASSED; }
+else{ TESTFAILED; }
 
 
    }
 
 
-   
+
+
 
 
 	int stop;
