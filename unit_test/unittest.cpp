@@ -64,8 +64,8 @@ class MemberSlotTester : public sanyan::SignalingClass, public sanyan::SlottedCl
 {
 public:
    MEMBERSLOT( DoubleReceive, double, MemberSlotTester );
-   MEMBERSIGNALARGS( DoubleUpdate, double, MemberSlotTester );
-   MEMBERSIGNALARGS( DoublePUpdate, double*, MemberSlotTester );
+   MEMBERSIGNAL( DoubleUpdate, double, MemberSlotTester );
+   MEMBERSIGNAL( DoublePUpdate, double*, MemberSlotTester );
    MEMBERSLOT( DoublePReceive, double*, MemberSlotTester );
 
    MemberSlotTester()
@@ -128,7 +128,7 @@ int main()
    bool connected = false;
    {
       TESTINFO( "Connecting void signal to void function pointer" );
-      sanyan::Signal<void> voidSignal( "EmptySignal" );
+      SIGNAL( voidSignal, void );
       connected = voidSignal.Connect( &SimpleSlotFunction );
       if( connected ) { TESTPASSED; } else { TESTFAILED; }
       //TESTINFO( "Connecting void signal to non-void function pointer" );
@@ -268,13 +268,13 @@ int main()
       MemberSlotTester* mstP = new MemberSlotTester();
       connected = false;
       TESTINFO( "Connecting stack slot by string to heap signal by string" );
-      connected = sanyan::CONNECT( &mstR, "DoubleUpdate", mstP, "DoubleReceive" );
+      connected = sanyan::OBJECT_CONNECT( &mstR, "DoubleUpdate", mstP, "DoubleReceive" );
       if( connected ){ TESTPASSED; } else{ TESTFAILED; }
       TESTINFO( "Signaling stack signal to heap slot connected by string lookup" );
       mstR.DoubleUpdate( doubleTestValue );
       TESTINFO( "Disconnecting stack signal to heap slot by string lookup" );
       disconnected = false;
-      disconnected = sanyan::DISCONNECT( &mstR, "DoubleUpdate", mstP, "DoubleReceive" );
+      disconnected = sanyan::OBJECT_DISCONNECT( &mstR, "DoubleUpdate", mstP, "DoubleReceive" );
       if( disconnected ){ TESTPASSED; } else{ TESTFAILED; }
       TESTINFO( "Signaling stack signal to disconnected heap slot" );
       mstR.DoubleUpdate( doubleTestValue );
@@ -282,7 +282,7 @@ int main()
       TESTPASSED;
       TESTINFO( "Reconnecting stack signal to previously disconnected heap slot" );
       connected = false;
-      connected = sanyan::CONNECT( &mstR, "DoubleUpdate", mstP, "DoubleReceive" );
+      connected = sanyan::OBJECT_CONNECT( &mstR, "DoubleUpdate", mstP, "DoubleReceive" );
       if( connected ){ TESTPASSED; } else{ TESTFAILED; }
       TESTINFO( "Resignaling stack signal to previously disconnected but reconnected heap slot" );
       mstR.DoubleUpdate( doubleTestValue );
@@ -298,7 +298,7 @@ int main()
       MemberSlotTester mstR2;
       TESTINFO( "Connecting non existint signal to existing slot" );
       connected = true;
-      connected = sanyan::CONNECT( &mstR1, "DoesntExist", &mstR2, "DoubleReceive" );
+      connected = sanyan::OBJECT_CONNECT( &mstR1, "DoesntExist", &mstR2, "DoubleReceive" );
       if( !connected ) { TESTPASSED; } else{ TESTFAILED; }
 
 

@@ -21,10 +21,11 @@
 #define SANYAN_DEBUG_INFO( msg )
 #endif
 
-//#define SIGNAL( name ) sanyan::Signal<> name = { #name }
+#define SIGNAL( name, type ) sanyan::Signal< type > name = { #name }
+#define SLOT(  )
 
 //#define MEMBERSIGNAL( name, parentClass ) sanyan::Signal<> name = { #name, this }
-#define MEMBERSIGNALARGS( name, type, parentClass ) sanyan::Signal< type > name = { #name, this }
+#define MEMBERSIGNAL( name, type, parentClass ) sanyan::Signal< type > name = { #name, this }
 
 #define MEMBERSLOT( name, type, parentClass )  void name( type ); \
    sanyan::MemberSlot< type, parentClass > name##Slot = { #name, this, &parentClass::name }
@@ -58,12 +59,14 @@ namespace sanyan
    class SignalToSlotPrivateInterface
    {
 
-   private:
+   protected:
       friend class SignalBase;
       void RegisterSignalBase( SignalBase* signal ) { RegisterSignal( signal ); }
       virtual void RegisterSignal( SignalBase* signal ) = 0;
       void UnregisterSignalBase( SignalBase* signal ) { UnregisterSignal( signal ); }
       virtual void UnregisterSignal( SignalBase* signal ) = 0;
+      virtual void ReceiveBase( const void* arguments ){ Receive( arguments) ; }
+      virtual void Receive( const void* arguments ) = 0;
    };
 
    class SlotToSignalPrivateInterface
@@ -84,15 +87,15 @@ namespace sanyan
       virtual ~SlotBase();
       std::string SlotName() const;
       Type_ID SlotType() const;
-      void ReceiveBase( const void* arguments );
       Unique_ID_Type UUID() const;
 
       bool operator==( const SlotBase& rhs );
       bool operator==( const SlotBase* rhs );
       bool operator==( void( *const function_pointer )( void* ) );
 
-      virtual void Receive( const void*  arguments ) = 0;
       SlottedClass* const SlottedParent();
+
+      protected:
 
    private:
 
@@ -411,13 +414,6 @@ namespace sanyan
       {
       }
 
-      //one shot convenience signal to SlotBase
-      Signal( const SlotBase& receiving_slot, T value )
-         : SignalBase( "", typeid( T ).hash_code() )
-      {
-         receiving_slot.Receive( value );
-      }
-
       Signal( void( *function_pointer )( T ), T value )
          : SignalBase( "", typeid( T ).hash_code() )
       {
@@ -520,14 +516,6 @@ namespace sanyan
       {
       }
 
-      //one shot convenience signal to SlotBase
-      Signal( SlotBase& receiving_slot )
-         : SignalBase( "", 0 )
-      {
-         char buff;
-         receiving_slot.Receive( (void*)&buff );
-      }
-
       Signal( void( *function_pointer )( void ) )
          : SignalBase( "", 0 )
       {
@@ -567,6 +555,11 @@ namespace sanyan
          return ret;
       }
 
+      void Emit()
+      {
+         char noargs;
+         BaseEmit( (void*)&noargs );
+      }
 
       void operator()()
       {
@@ -578,13 +571,6 @@ namespace sanyan
       //Signal( ) {};
 
    };
-
-   inline 
-   void 
-   SlotBase::ReceiveBase( const void* arguments )
-   {
-      Receive( arguments );
-   }
 
    inline
    SlottedClass::SlottedClass()
@@ -802,7 +788,7 @@ namespace sanyan
 
    inline
    bool
-   CONNECT( SignalingClass* signal_class, std::string signal_name, SlottedClass* slot_class, std::string slot_name )
+   OBJECT_CONNECT( SignalingClass* signal_class, std::string signal_name, SlottedClass* slot_class, std::string slot_name )
    {
 
       bool ret = false;
@@ -829,7 +815,7 @@ namespace sanyan
 
    inline
    bool
-   DISCONNECT( SignalingClass* signal_class, std::string signal_name, SlottedClass* slot_class, std::string slot_name )
+   OBJECT_DISCONNECT( SignalingClass* signal_class, std::string signal_name, SlottedClass* slot_class, std::string slot_name )
    {
 
       bool ret = false;
