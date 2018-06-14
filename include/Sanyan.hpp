@@ -30,6 +30,9 @@
 #define MEMBERSLOT( name, type, parentClass )  void name( type ); \
    sanyan::MemberSlot< type, parentClass > name##Slot = { #name, this, &parentClass::name }
 
+#define VIRTUALMEMBERSLOT( name, type, parentClass ) virtual void name( type ); \
+	sanyan::MemberSlot< type, parentClass > name##Slot = { #name, this, &parentClass::name }
+
 
 
 namespace sanyan
@@ -244,7 +247,7 @@ namespace sanyan
 
       void OnReceived()
       {
-         ( callback_parent_object_->*member_function_callback_ )( void );
+         ( callback_parent_object_->*member_function_callback_ )(  );
       }
 
    private:

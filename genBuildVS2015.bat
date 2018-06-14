@@ -1,3 +1,3 @@
 pushd build
-premake5 vs2013
+premake5 vs2015
 popd

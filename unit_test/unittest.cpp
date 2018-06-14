@@ -307,7 +307,7 @@ int main()
    {
       //do some timing benchmarks compared to other approaches
       //first call a double passed in by copy
-      unsigned long long iterationsToRun = 30000000;
+      unsigned long long iterationsToRun = 30000;
 
 
       double localDValue = 101.33;
